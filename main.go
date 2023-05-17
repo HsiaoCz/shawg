@@ -9,6 +9,17 @@ func main() {
 	r := shawg.New()
 	r.GET("/hello", handleHello)
 	r.GET("/user", handleUser)
+	v1 := r.Group("/v1")
+	{
+		v1.GET("/", func(ctx *shawg.Context) {
+			ctx.HTML(http.StatusOK, "<h1>Hello Everyone</h1>")
+		})
+		v1.GET("/hello", func(ctx *shawg.Context) {
+			ctx.JSON(http.StatusOK, shawg.H{
+				"message": "hello",
+			})
+		})
+	}
 	r.Run(":9091")
 }
 
