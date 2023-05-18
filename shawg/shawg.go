@@ -3,6 +3,7 @@ package shawg
 import (
 	"log"
 	"net/http"
+	"strings"
 )
 
 // 定义路由处理函数的模板
@@ -31,6 +32,11 @@ func New() *Engine {
 	engine.groups = []*RouterGroup{engine.RouterGroup}
 	return engine
 }
+
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
+}
+
 func (group *RouterGroup) Group(prefix string) *RouterGroup {
 	engine := group.engine
 	newGroup := &RouterGroup{
@@ -81,6 +87,13 @@ func (e *Engine) Run(addr string) error {
 // 这里实现ServeHTTP方法
 // 代表我们的引擎可以作为一个handler
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range e.groups {
+		if strings.HasPrefix(r.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
 	c := newContext(w, r)
+	c.handlers = middlewares
 	e.router.handle(c)
 }

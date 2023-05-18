@@ -7,6 +7,8 @@ import (
 
 func main() {
 	r := shawg.New()
+	// 使用一下全局中间件
+	r.Use(shawg.Logger())
 	r.GET("/hello", handleHello)
 	r.GET("/user", handleUser)
 	v1 := r.Group("/v1")
