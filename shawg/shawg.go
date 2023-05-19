@@ -1,8 +1,10 @@
 package shawg
 
 import (
+	"html/template"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -13,8 +15,10 @@ type HandlerFunc func(*Context)
 // 定义类似于gin的引擎
 type Engine struct {
 	*RouterGroup
-	router *router
-	groups []*RouterGroup
+	router       *router
+	groups       []*RouterGroup
+	htmlTempates *template.Template //html
+	funcMap      template.FuncMap
 }
 
 // 分组路由
@@ -31,6 +35,30 @@ func New() *Engine {
 	engine.RouterGroup = &RouterGroup{engine: engine}
 	engine.groups = []*RouterGroup{engine.RouterGroup}
 	return engine
+}
+
+// template
+func (group *RouterGroup) createStaticHandler(relativePath string, fs http.FileSystem) HandlerFunc {
+	absolutePath := path.Join(group.prefix, relativePath)
+	fileServer := http.StripPrefix(absolutePath, http.FileServer(fs))
+	return func(c *Context) {
+		file := c.Param("filepath")
+		// Check if file exists and/or if we have permission to access it
+		if _, err := fs.Open(file); err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
+		fileServer.ServeHTTP(c.Writer, c.Req)
+	}
+}
+
+// 这个方法可以让用户将磁盘上的某个文件映射到路由
+func (group *RouterGroup) Static(relativePath string, root string) {
+	handler := group.createStaticHandler(relativePath, http.Dir(root))
+	urlPattern := path.Join(relativePath, "/*filepath")
+	// Register GET handlers
+	group.GET(urlPattern, handler)
 }
 
 func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
@@ -84,6 +112,14 @@ func (e *Engine) Run(addr string) error {
 	return http.ListenAndServe(addr, e)
 }
 
+func (e *Engine) SetFuncMap(funcMap template.FuncMap) {
+	e.funcMap = funcMap
+}
+
+func (e *Engine) LoadHTMLGlob(pattern string) {
+	e.htmlTempates = template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
+}
+
 // 这里实现ServeHTTP方法
 // 代表我们的引擎可以作为一个handler
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -95,5 +131,6 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	c := newContext(w, r)
 	c.handlers = middlewares
+	c.engine = e
 	e.router.handle(c)
 }
